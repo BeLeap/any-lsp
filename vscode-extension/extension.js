@@ -4,6 +4,7 @@ const path = require("path");
 const vscode = require("vscode");
 
 const FILE_SELECTOR = [{ scheme: "file", pattern: "**/*" }];
+let activeManager;
 
 class LspClient {
   constructor(context, rootPath, output) {
@@ -283,6 +284,7 @@ class ClientManager {
 function activate(context) {
   const output = vscode.window.createOutputChannel("any-lsp");
   const manager = new ClientManager(context, output);
+  activeManager = manager;
   const selector = FILE_SELECTOR;
 
   context.subscriptions.push(
@@ -314,12 +316,7 @@ function activate(context) {
     }),
     vscode.workspace.onDidCloseTextDocument((document) => {
       manager.close(document).catch((error) => output.appendLine(String(error)));
-    }),
-    {
-      dispose() {
-        manager.stop().catch((error) => output.appendLine(String(error)));
-      }
-    }
+    })
   );
 
   for (const document of vscode.workspace.textDocuments) {
@@ -327,8 +324,12 @@ function activate(context) {
   }
 }
 
-function deactivate() {
-  return undefined;
+async function deactivate() {
+  if (activeManager) {
+    const manager = activeManager;
+    activeManager = undefined;
+    await manager.stop();
+  }
 }
 
 module.exports = { activate, deactivate };
