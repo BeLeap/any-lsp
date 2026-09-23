@@ -1,0 +1,27 @@
+# Project-local Helix configuration for testing any-lsp.
+#
+# Start Helix from this repository (for example, `hx README.md`). Helix runs
+# language servers from the detected workspace root, so the local flake app can
+# be launched directly with `nix run --quiet .#`.
+
+[language-server.any-lsp]
+command = "nix"
+args = ["run", "--quiet", ".#"]
+
+# These keys are sent as the server's initializationOptions. They are also a
+# small example of how to tune any-lsp for another workspace.
+[language-server.any-lsp.config]
+maxResults = 1000
+caseSensitive = true
+exclude = ["target/**", "result/**"]
+
+# Keep this project-local example opt-in so it does not replace Helix's
+# built-in Rust, Markdown, TOML, or Nix language definitions. Test it with
+# `:set-language any-lsp-example`, or open a file ending in
+# `.any-lsp-example`.
+[[language]]
+name = "any-lsp-example"
+scope = "source.any-lsp-example"
+file-types = ["any-lsp-example"]
+roots = [".git"]
+language-servers = ["any-lsp"]

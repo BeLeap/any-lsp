@@ -1,0 +1,7 @@
+# any-lsp example fixture
+
+fn any_lsp_demo() {
+    // Keep this declaration near the top so `gd` has an obvious target.
+}
+
+Call any_lsp_demo from this line to try `gr` and see the references.

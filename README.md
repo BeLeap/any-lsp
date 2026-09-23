@@ -39,6 +39,23 @@ The client can pass optional `initializationOptions`:
 
 When `rg` is unavailable, a built-in text-search fallback keeps open-buffer and small-workspace use functional.
 
+## Try it in Helix
+
+This repository includes an opt-in Helix language example in
+`.helix/languages.toml`. It does not override Helix's built-in Rust, Markdown,
+TOML, or Nix definitions. The example server is launched through the flake's
+default app, `nix run --quiet .#`.
+
+Open the fixture with:
+
+```sh
+hx examples/any-lsp-example.any-lsp-example
+```
+
+Place the cursor on `any_lsp_demo` and use `gd` to jump to its declaration or
+`gr` to list its references. To try the example language on another buffer,
+use `:set-language any-lsp-example` inside Helix.
+
 ## Development
 
 ```sh
