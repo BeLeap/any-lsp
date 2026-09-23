@@ -1,0 +1,1 @@
+- by using ripgrep we can implement that can support go to defenition & reference for any type of language - including natural language
