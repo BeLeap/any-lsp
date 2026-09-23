@@ -76,8 +76,12 @@ class LspClient {
       return configured;
     }
 
-    const executable = process.platform === "win32" ? "any-lsp.exe" : "any-lsp";
-    const bundled = this.context.asAbsolutePath(path.join("bin", executable));
+    const architecture = {
+      x64: "x86_64",
+      arm64: "aarch64"
+    }[process.arch] || process.arch;
+    const bundledName = `any-lsp-${architecture}-${process.platform}`;
+    const bundled = this.context.asAbsolutePath(path.join("bin", bundledName));
     return fs.existsSync(bundled) ? bundled : "any-lsp";
   }
 

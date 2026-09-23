@@ -69,9 +69,11 @@ nix build .#vscode-extension
 code --install-extension "$(find "$(nix path-info .#vscode-extension)" -name '*.vsix' -print -quit)"
 ```
 
-The VSIX bundles the matching `any-lsp` executable. For development, set
-`anyLsp.serverPath` to another executable, or leave it empty to use
-`any-lsp` from `PATH` when the extension is not using the bundled package.
+The locally built VSIX bundles the matching platform executable. CI release
+VSIX assets bundle all supported platform executables and select the matching
+one at runtime. For development, set `anyLsp.serverPath` to another
+executable, or leave it empty to use `any-lsp` from `PATH` when the extension
+is not using a bundled executable.
 
 The extension supports these settings:
 

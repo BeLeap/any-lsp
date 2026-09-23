@@ -151,21 +151,11 @@ jobs:
           cp -L result-any-lsp/bin/any-lsp "dist/any-lsp-${{ matrix.system }}"
           tar -C dist -czf "any-lsp-${{ matrix.system }}.tar.gz" "any-lsp-${{ matrix.system }}"
 
-      - name: Build VS Code extension
-        run: nix build ".#packages.${{ matrix.system }}.vscode-extension" --out-link result-vscode-extension --print-build-logs
-
-      - name: Package VS Code extension
-        run: |
-          cp -L result-vscode-extension/*.vsix \
-            "any-lsp-vscode-${{ needs.prepare.outputs.version }}-${{ matrix.system }}.vsix"
-
       - name: Upload platform CI artifact
         uses: actions/upload-artifact@v4
         with:
           name: ci-${{ matrix.system }}
-          path: |
-            any-lsp-${{ matrix.system }}.tar.gz
-            any-lsp-vscode-${{ needs.prepare.outputs.version }}-${{ matrix.system }}.vsix
+          path: any-lsp-${{ matrix.system }}.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -179,12 +169,37 @@ jobs:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
 
     steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Enable Nix binary cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
       - name: Download CI artifact
         uses: actions/download-artifact@v4
         with:
           pattern: ci-*
           path: dist
           merge-multiple: true
+
+      - name: Build universal VS Code extension
+        run: |
+          set -euo pipefail
+          for archive in dist/*.tar.gz; do
+            tar -xzf "$archive" -C dist
+          done
+          nix develop --command bash ./scripts/package-vscode-extension.sh \
+            "${{ needs.prepare.outputs.version }}" \
+            vscode-extension \
+            "dist/any-lsp-vscode-${{ needs.prepare.outputs.version }}.vsix" \
+            x86_64-linux=dist/any-lsp-x86_64-linux \
+            aarch64-linux=dist/any-lsp-aarch64-linux \
+            aarch64-darwin=dist/any-lsp-aarch64-darwin
 
       - name: Create or update release and upload binaries
         env:
