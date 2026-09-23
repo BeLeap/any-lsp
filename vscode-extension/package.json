@@ -1,0 +1,62 @@
+{
+  "name": "any-lsp",
+  "displayName": "any-lsp",
+  "description": "Language-agnostic definition and reference navigation for every file",
+  "version": "0.2639.0",
+  "publisher": "beleap",
+  "license": "MIT",
+  "engines": {
+    "vscode": ">=1.85.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "any-lsp",
+      "properties": {
+        "anyLsp.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the any-lsp executable. Leave empty to use the bundled executable or any-lsp on PATH."
+        },
+        "anyLsp.maxResults": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 1,
+          "description": "Maximum number of locations returned by any-lsp."
+        },
+        "anyLsp.caseSensitive": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether any-lsp searches with case-sensitive matching."
+        },
+        "anyLsp.include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Optional ripgrep glob patterns to include in workspace searches."
+        },
+        "anyLsp.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/.git/**",
+            "**/node_modules/**",
+            "**/target/**",
+            "**/vendor/**"
+          ],
+          "description": "Ripgrep glob patterns to exclude from workspace searches."
+        }
+      }
+    }
+  }
+}
