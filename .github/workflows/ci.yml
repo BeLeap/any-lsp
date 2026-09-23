@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - '*'
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build ${{ matrix.system }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - system: aarch64-darwin
+            runner: macos-14
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Enable Nix binary cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build binary
+        run: nix build ".#packages.${{ matrix.system }}.any-lsp" --print-build-logs
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp -L result/bin/any-lsp "dist/any-lsp-${{ matrix.system }}"
+          tar -C dist -czf "any-lsp-${{ matrix.system }}.tar.gz" "any-lsp-${{ matrix.system }}"
+
+      - name: Upload platform CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-${{ matrix.system }}
+          path: any-lsp-${{ matrix.system }}.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  tag:
+    name: Tag master with HeadVer
+    if: github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      HEADVER_HEAD: '0'
+
+    outputs:
+      tag: ${{ steps.headver.outputs.tag }}
+
+    steps:
+      - name: Check out tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create HeadVer tag
+        id: headver
+        run: |
+          set -euo pipefail
+
+          # HeadVer: {head}.{yearweek}.{build}
+          # https://github.com/line/headver
+          yearweek="$(date -u +%g%V)"
+          next_build=0
+
+          while IFS= read -r existing_tag; do
+            if [[ "$existing_tag" =~ ^v${HEADVER_HEAD}\.[0-9]{4}\.([0-9]+)$ ]]; then
+              existing_build="${BASH_REMATCH[1]}"
+              if (( existing_build >= next_build )); then
+                next_build=$((existing_build + 1))
+              fi
+            fi
+          done < <(git tag --list "v${HEADVER_HEAD}.*")
+
+          tag="v${HEADVER_HEAD}.${yearweek}.${next_build}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag --annotate "$tag" "$GITHUB_SHA" --message "Release $tag"
+          git push origin "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Create GitHub release
+    if: >-
+      always() && needs.build.result == 'success' &&
+      (needs.tag.result == 'success' || needs.tag.result == 'skipped')
+    needs: [build, tag]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.tag.outputs.tag || github.ref_name }}
+
+    steps:
+      - name: Download CI artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ci-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create release and upload binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/*.tar.gz \
+            --verify-tag \
+            --title "$RELEASE_TAG" \
+            --generate-notes
