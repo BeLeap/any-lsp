@@ -1,3 +1,7 @@
 target/
 .direnv/
 result
+
+# Keep the project-local Helix configuration as a usable example.
+!.helix/
+!.helix/languages.toml
