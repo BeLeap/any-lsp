@@ -5,6 +5,8 @@
 
   outputs = { self, nixpkgs }:
     let
+      cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+
       systems = [
         "aarch64-darwin"
         "aarch64-linux"
@@ -22,7 +24,7 @@
         let
           package = pkgs.rustPlatform.buildRustPackage {
             pname = "any-lsp";
-            version = "0.1.0";
+            version = cargoToml.package.version;
             src = ./.;
 
             cargoLock = { lockFile = ./Cargo.lock; };
@@ -65,7 +67,7 @@
       devShells = forAllSystems ({ pkgs }:
         {
           default = pkgs.mkShell {
-            packages = [ pkgs.cargo pkgs.clippy pkgs.ripgrep pkgs.rustc pkgs.rustfmt ];
+            packages = [ pkgs.cargo pkgs.cargo-edit pkgs.clippy pkgs.ripgrep pkgs.rustc pkgs.rustfmt ];
           };
         });
     };
