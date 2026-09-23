@@ -2,7 +2,7 @@
   "name": "any-lsp",
   "displayName": "any-lsp",
   "description": "Language-agnostic definition and reference navigation for every file",
-  "version": "0.2639.0",
+  "version": "0.2639.2",
   "publisher": "beleap",
   "license": "MIT",
   "engines": {
