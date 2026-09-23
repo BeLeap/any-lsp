@@ -143,19 +143,29 @@ jobs:
           test "$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)" = "${{ needs.prepare.outputs.version }}"
 
       - name: Build binary
-        run: nix build ".#packages.${{ matrix.system }}.any-lsp" --print-build-logs
+        run: nix build ".#packages.${{ matrix.system }}.any-lsp" --out-link result-any-lsp --print-build-logs
 
       - name: Package binary
         run: |
           mkdir -p dist
-          cp -L result/bin/any-lsp "dist/any-lsp-${{ matrix.system }}"
+          cp -L result-any-lsp/bin/any-lsp "dist/any-lsp-${{ matrix.system }}"
           tar -C dist -czf "any-lsp-${{ matrix.system }}.tar.gz" "any-lsp-${{ matrix.system }}"
+
+      - name: Build VS Code extension
+        run: nix build ".#packages.${{ matrix.system }}.vscode-extension" --out-link result-vscode-extension --print-build-logs
+
+      - name: Package VS Code extension
+        run: |
+          cp -L result-vscode-extension/*.vsix \
+            "any-lsp-vscode-${{ needs.prepare.outputs.version }}-${{ matrix.system }}.vsix"
 
       - name: Upload platform CI artifact
         uses: actions/upload-artifact@v4
         with:
           name: ci-${{ matrix.system }}
-          path: any-lsp-${{ matrix.system }}.tar.gz
+          path: |
+            any-lsp-${{ matrix.system }}.tar.gz
+            any-lsp-vscode-${{ needs.prepare.outputs.version }}-${{ matrix.system }}.vsix
           if-no-files-found: error
           retention-days: 14
 
@@ -182,9 +192,9 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" dist/*.tar.gz --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/*.vsix --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$RELEASE_TAG" dist/*.tar.gz \
+            gh release create "$RELEASE_TAG" dist/*.tar.gz dist/*.vsix \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
               --title "$RELEASE_TAG" \
