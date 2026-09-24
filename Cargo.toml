@@ -9,3 +9,9 @@ license = "MPL-2.0"
 grep = "0.4.1"
 ignore = "0.4.29"
 serde_json = "1"
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+panic = "abort"
