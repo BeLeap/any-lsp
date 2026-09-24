@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "any-lsp"
-version = "0.2639.6"
+version = "0.2639.7"
 dependencies = [
  "grep",
  "ignore",
