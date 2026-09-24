@@ -42,6 +42,9 @@ pkgs.stdenvNoCC.mkDerivation {
       "$extension_root/package.json"
     rm -f "$extension_root/package.json.bak"
 
+    # VS Code rewrites package.json with installation metadata after extraction.
+    chmod u+w "$extension_root/package.json"
+
     ${copyBinaries}
 
     cat > "$vsix_root/[Content_Types].xml" <<'EOF'
