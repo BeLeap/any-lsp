@@ -70,11 +70,14 @@ nix build .#vscode-extension
 code --install-extension "$(find "$(nix path-info .#vscode-extension)" -name '*.vsix' -print -quit)"
 ```
 
-The locally built VSIX bundles the matching platform executable. CI release
-VSIX assets bundle all supported platform executables and select the matching
-one at runtime. For development, set `anyLsp.serverPath` to another
-executable, or leave it empty to use `any-lsp` from `PATH` when the extension
-is not using a bundled executable.
+`nix build .#vscode-extension` bundles the matching platform binary. CI
+publishes binaries separately as `any-lsp-static-<system>.tar.gz`, and the
+release VSIX uses these same assets. Linux binaries are statically linked with
+musl; the macOS asset is a native, unwrapped executable. The regular
+`any-lsp-<system>.tar.gz` assets remain the standard Nix-built CLI binaries. For
+development, set `anyLsp.serverPath` to another executable, or leave it empty
+to use `any-lsp` from `PATH` when the extension is not using a bundled
+executable.
 
 The extension supports these settings:
 

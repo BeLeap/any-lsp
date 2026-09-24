@@ -18,8 +18,21 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "staticBinaries": "staticBinaries"
       }
+    },
+    "staticBinaries": {
+      "flake": false,
+      "locked": {
+        "path": "./static-binaries",
+        "type": "path"
+      },
+      "original": {
+        "path": "./static-binaries",
+        "type": "path"
+      },
+      "parent": []
     }
   },
   "root": "root",

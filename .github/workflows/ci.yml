@@ -142,20 +142,34 @@ jobs:
           set -euo pipefail
           test "$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)" = "${{ needs.prepare.outputs.version }}"
 
-      - name: Build binary
+      - name: Build CLI package
         run: nix build ".#packages.${{ matrix.system }}.any-lsp" --out-link result-any-lsp --print-build-logs
 
-      - name: Package binary
+      - name: Build static binary
+        run: nix build ".#packages.${{ matrix.system }}.static-binary" --out-link result-static-binary --print-build-logs
+
+      - name: Package binaries
         run: |
+          set -euo pipefail
           mkdir -p dist
-          cp -L result-any-lsp/bin/any-lsp "dist/any-lsp-${{ matrix.system }}"
+
+          cli="result-any-lsp/bin/any-lsp"
+          "$cli" --help >/dev/null
+          cp -L "$cli" "dist/any-lsp-${{ matrix.system }}"
           tar -C dist -czf "any-lsp-${{ matrix.system }}.tar.gz" "any-lsp-${{ matrix.system }}"
+
+          static_binary="result-static-binary/bin/any-lsp"
+          "$static_binary" --help >/dev/null
+          cp -L "$static_binary" "dist/any-lsp-static-${{ matrix.system }}"
+          tar -C dist -czf "any-lsp-static-${{ matrix.system }}.tar.gz" "any-lsp-static-${{ matrix.system }}"
 
       - name: Upload platform CI artifact
         uses: actions/upload-artifact@v4
         with:
           name: ci-${{ matrix.system }}
-          path: any-lsp-${{ matrix.system }}.tar.gz
+          path: |
+            any-lsp-${{ matrix.system }}.tar.gz
+            any-lsp-static-${{ matrix.system }}.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -193,13 +207,15 @@ jobs:
           for archive in dist/*.tar.gz; do
             tar -xzf "$archive" -C dist
           done
-          nix develop --command bash ./scripts/package-vscode-extension.sh \
-            "${{ needs.prepare.outputs.version }}" \
-            vscode-extension \
-            "dist/any-lsp-vscode-${{ needs.prepare.outputs.version }}.vsix" \
-            x86_64-linux=dist/any-lsp-x86_64-linux \
-            aarch64-linux=dist/any-lsp-aarch64-linux \
-            aarch64-darwin=dist/any-lsp-aarch64-darwin
+          version="${{ needs.prepare.outputs.version }}"
+          nix build .#vscode-extension \
+            --override-input staticBinaries "path:$PWD/dist" \
+            --no-write-lock-file \
+            --out-link result-vscode-extension \
+            --print-build-logs
+          vsix="$(find -L result-vscode-extension -maxdepth 1 -name '*.vsix' -print -quit)"
+          test -n "$vsix"
+          cp "$vsix" "dist/any-lsp-vscode-${version}.vsix"
 
       - name: Create or update release and upload binaries
         env:

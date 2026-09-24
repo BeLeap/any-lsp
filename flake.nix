@@ -2,8 +2,12 @@
   description = "A language-agnostic LSP server powered by ripgrep";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  inputs.staticBinaries = {
+    url = "path:./static-binaries";
+    flake = false;
+  };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, staticBinaries }:
     let
       cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
 
@@ -22,13 +26,12 @@
     {
       packages = forAllSystems ({ pkgs }:
         let
-          package = pkgs.rustPlatform.buildRustPackage {
+          common = {
             pname = "any-lsp";
             version = cargoToml.package.version;
             src = ./.;
 
             cargoLock = { lockFile = ./Cargo.lock; };
-
             doCheck = true;
 
             meta = {
@@ -38,29 +41,41 @@
             };
           };
 
-          vscodeExtension = pkgs.stdenvNoCC.mkDerivation {
-            pname = "any-lsp-vscode";
+          package = pkgs.rustPlatform.buildRustPackage common;
+
+          staticBinary =
+            if pkgs.stdenv.hostPlatform.isLinux then
+              pkgs.pkgsStatic.rustPlatform.buildRustPackage common
+            else
+              package;
+
+          staticBinaryPath = system: "${staticBinaries}/any-lsp-static-${system}";
+          hasStaticBinary = system: builtins.pathExists (staticBinaryPath system);
+          hasAnyStaticBinary = builtins.any hasStaticBinary systems;
+          hasAllStaticBinaries = builtins.all hasStaticBinary systems;
+
+          extensionBinaries =
+            if hasAllStaticBinaries then
+              builtins.listToAttrs (map (system: {
+                name = system;
+                value = staticBinaryPath system;
+              }) systems)
+            else if hasAnyStaticBinary then
+              throw "staticBinaries input must include binaries for all supported systems"
+            else {
+              "${pkgs.stdenv.hostPlatform.system}" = "${staticBinary}/bin/any-lsp";
+            };
+
+          vscodeExtension = import ./nix/package-vscode-extension.nix {
+            inherit pkgs;
             version = cargoToml.package.version;
-            src = ./vscode-extension;
-
-            nativeBuildInputs = [ pkgs.zip ];
-
-            dontConfigure = true;
-            dontBuild = true;
-
-            installPhase = ''
-              mkdir -p "$out"
-              bash ${./scripts/package-vscode-extension.sh} \
-                "${cargoToml.package.version}" \
-                "$PWD" \
-                "$out/any-lsp-vscode-${cargoToml.package.version}.vsix" \
-                "${pkgs.stdenv.hostPlatform.system}=${package}/bin/any-lsp"
-            '';
+            binaries = extensionBinaries;
           };
         in
         {
           default = package;
           any-lsp = package;
+          static-binary = staticBinary;
           vscode-extension = vscodeExtension;
         });
 
