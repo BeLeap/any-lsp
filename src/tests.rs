@@ -1,10 +1,10 @@
 use crate::position::{symbol_at_position, uri_from_path};
-use crate::search::find_matches;
+use crate::search::{find_matches, ServerConfig, WorkspaceSearcher};
 use crate::server::apply_change;
 use crate::transport::{read_message, serve};
 use crate::LspServer;
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -134,6 +134,44 @@ fn unicode_and_qualified_positions_work() {
 #[test]
 fn punctuation_symbols_are_searchable() {
     assert_eq!(find_matches("C++ uses C++", "C++", true).len(), 2);
+}
+
+#[test]
+fn native_search_respects_ripgrep_filters() {
+    let directory = TempDir::new();
+    write_file(&directory.0.join("code.rs"), "needle\n");
+    write_file(&directory.0.join("notes.txt"), "needle\n");
+    write_file(&directory.0.join("excluded.rs"), "needle\n");
+    write_file(&directory.0.join(".hidden.rs"), "needle\n");
+    write_file(&directory.0.join("ignored.txt"), "needle\n");
+    write_file(&directory.0.join(".rgignore"), "ignored.txt\n");
+
+    let unfiltered = WorkspaceSearcher {
+        root: directory.0.clone(),
+        config: ServerConfig::default(),
+    }
+    .search("needle", &HashMap::new());
+    assert!(!unfiltered
+        .iter()
+        .any(|result| result.path.file_name().unwrap() == "ignored.txt"));
+
+    let mut config = ServerConfig::default();
+    config.include = vec!["**/*.rs".to_string()];
+    config.exclude = vec!["excluded.rs".to_string()];
+    let results = WorkspaceSearcher {
+        root: directory.0.clone(),
+        config,
+    }
+    .search("needle", &HashMap::new());
+    let paths: HashSet<_> = results
+        .iter()
+        .map(|result| result.path.file_name().unwrap().to_owned())
+        .collect();
+
+    assert_eq!(
+        paths,
+        HashSet::from(["code.rs".into(), ".hidden.rs".into(),])
+    );
 }
 
 #[test]
