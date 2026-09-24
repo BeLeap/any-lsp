@@ -56,6 +56,32 @@ Place the cursor on `any_lsp_demo` and use `gd` to jump to its declaration or
 `gr` to list its references. To try the example language on another buffer,
 use `:set-language any-lsp-example` inside Helix.
 
+## Try it in VS Code
+
+The VS Code extension registers any-lsp's definition and reference providers
+for every local file. VS Code keeps existing providers such as rust-analyzer
+active and combines their results with any-lsp's text-search results.
+
+Build and install the Nix-packaged extension:
+
+```sh
+nix build .#vscode-extension
+code --install-extension "$(find "$(nix path-info .#vscode-extension)" -name '*.vsix' -print -quit)"
+```
+
+The locally built VSIX bundles the matching platform executable. CI release
+VSIX assets bundle all supported platform executables and select the matching
+one at runtime. For development, set `anyLsp.serverPath` to another
+executable, or leave it empty to use `any-lsp` from `PATH` when the extension
+is not using a bundled executable.
+
+The extension supports these settings:
+
+- `anyLsp.maxResults`
+- `anyLsp.caseSensitive`
+- `anyLsp.include`
+- `anyLsp.exclude`
+
 ## Development
 
 ```sh

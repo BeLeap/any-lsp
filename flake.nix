@@ -44,10 +44,31 @@
               license = pkgs.lib.licenses.mit;
             };
           };
+
+          vscodeExtension = pkgs.stdenvNoCC.mkDerivation {
+            pname = "any-lsp-vscode";
+            version = cargoToml.package.version;
+            src = ./vscode-extension;
+
+            nativeBuildInputs = [ pkgs.zip ];
+
+            dontConfigure = true;
+            dontBuild = true;
+
+            installPhase = ''
+              mkdir -p "$out"
+              bash ${./scripts/package-vscode-extension.sh} \
+                "${cargoToml.package.version}" \
+                "$PWD" \
+                "$out/any-lsp-vscode-${cargoToml.package.version}.vsix" \
+                "${pkgs.stdenv.hostPlatform.system}=${package}/bin/any-lsp"
+            '';
+          };
         in
         {
           default = package;
           any-lsp = package;
+          vscode-extension = vscodeExtension;
         });
 
       apps = forAllSystems ({ pkgs }:
@@ -62,12 +83,13 @@
       checks = forAllSystems ({ pkgs }:
         {
           default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+          vscode-extension = self.packages.${pkgs.stdenv.hostPlatform.system}.vscode-extension;
         });
 
       devShells = forAllSystems ({ pkgs }:
         {
           default = pkgs.mkShell {
-            packages = [ pkgs.cargo pkgs.cargo-edit pkgs.clippy pkgs.ripgrep pkgs.rustc pkgs.rustfmt ];
+            packages = [ pkgs.cargo pkgs.cargo-edit pkgs.clippy pkgs.ripgrep pkgs.rustc pkgs.rustfmt pkgs.zip ];
           };
         });
     };
