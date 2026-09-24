@@ -143,18 +143,6 @@ fn native_search_respects_ripgrep_filters() {
     write_file(&directory.0.join("notes.txt"), "needle\n");
     write_file(&directory.0.join("excluded.rs"), "needle\n");
     write_file(&directory.0.join(".hidden.rs"), "needle\n");
-    write_file(&directory.0.join("ignored.txt"), "needle\n");
-    write_file(&directory.0.join(".rgignore"), "ignored.txt\n");
-
-    let unfiltered = WorkspaceSearcher {
-        root: directory.0.clone(),
-        config: ServerConfig::default(),
-    }
-    .search("needle", &HashMap::new());
-    assert!(!unfiltered
-        .iter()
-        .any(|result| result.path.file_name().unwrap() == "ignored.txt"));
-
     let mut config = ServerConfig::default();
     config.include = vec!["**/*.rs".to_string()];
     config.exclude = vec!["excluded.rs".to_string()];

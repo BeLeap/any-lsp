@@ -154,7 +154,7 @@ impl WorkspaceSearcher {
         };
 
         let mut walker = WalkBuilder::new(&self.root);
-        walker.hidden(false).add_custom_ignore_filename(".rgignore");
+        walker.hidden(false);
         let mut overrides = OverrideBuilder::new(&self.root);
         if overrides.add("!.git/**").is_err() {
             return Vec::new();
