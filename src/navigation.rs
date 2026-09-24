@@ -1,5 +1,5 @@
-use crate::position::path_from_uri;
-use crate::search::{find_matches, Occurrence};
+use crate::position::{path_from_uri, utf16_length};
+use crate::search::{find_matches, is_word_character, Occurrence};
 
 fn starts_with_word(value: &str, words: &[&str]) -> bool {
     words.iter().any(|word| {
@@ -15,8 +15,7 @@ fn starts_with_word(value: &str, words: &[&str]) -> bool {
     })
 }
 
-fn declaration_keyword(line: &str) -> bool {
-    let mut rest = line.trim_start();
+fn declaration_name_range(line: &str) -> Option<(usize, usize)> {
     let modifiers = [
         "export",
         "public",
@@ -29,38 +28,65 @@ fn declaration_keyword(line: &str) -> bool {
         "final",
         "readonly",
     ];
+    let keywords = [
+        "def",
+        "fn",
+        "func",
+        "function",
+        "class",
+        "struct",
+        "enum",
+        "interface",
+        "trait",
+        "type",
+        "record",
+        "module",
+        "namespace",
+        "macro",
+        "concept",
+        "template",
+        "package",
+    ];
+
+    let mut rest = line.trim_start();
+    let mut offset = line.len() - rest.len();
     while let Some(end) = rest.find(char::is_whitespace) {
-        let word = &rest[..end];
+        let modifier = &rest[..end];
         if !modifiers
             .iter()
-            .any(|modifier| word.eq_ignore_ascii_case(modifier))
+            .any(|candidate| modifier.eq_ignore_ascii_case(candidate))
         {
             break;
         }
-        rest = rest[end..].trim_start();
+        let after_modifier = &rest[end..];
+        let whitespace = after_modifier.len() - after_modifier.trim_start().len();
+        offset += end + whitespace;
+        rest = &line[offset..];
     }
-    starts_with_word(
-        rest,
-        &[
-            "def",
-            "fn",
-            "func",
-            "function",
-            "class",
-            "struct",
-            "enum",
-            "interface",
-            "trait",
-            "type",
-            "record",
-            "module",
-            "namespace",
-            "macro",
-            "concept",
-            "template",
-            "package",
-        ],
-    )
+
+    let keyword = keywords.iter().copied().find(|keyword| {
+        rest.strip_prefix(keyword)
+            .map(|suffix| {
+                suffix
+                    .chars()
+                    .next()
+                    .map(|character| !is_word_character(Some(character)))
+                    .unwrap_or(true)
+            })
+            .unwrap_or(false)
+    })?;
+    let after_keyword = &rest[keyword.len()..];
+    let whitespace = after_keyword.len() - after_keyword.trim_start().len();
+    let name_start = offset + keyword.len() + whitespace;
+    let name = &line[name_start..];
+    let mut name_end = 0;
+    for (byte_index, character) in name.char_indices() {
+        if !is_word_character(Some(character)) {
+            break;
+        }
+        name_end = byte_index + character.len_utf8();
+    }
+    (name_end > 0).then_some((name_start, name_start + name_end))
 }
 
 fn definition_score(occurrence: &Occurrence, symbol: &str) -> usize {
@@ -83,8 +109,13 @@ fn definition_score(occurrence: &Occurrence, symbol: &str) -> usize {
             .map(|character| character.is_whitespace())
             .unwrap_or(false);
     let mut score = if heading { 2 } else { 0 };
-    if declaration_keyword(line) {
-        score = score.max(4);
+    if let Some((start, end)) = declaration_name_range(line) {
+        if &line[start..end] == symbol
+            && occurrence.start == utf16_length(&line[..start])
+            && occurrence.end == utf16_length(&line[..end])
+        {
+            score = score.max(4);
+        }
     }
 
     let mut candidate = trimmed;

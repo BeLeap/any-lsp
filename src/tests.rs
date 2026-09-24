@@ -54,6 +54,31 @@ fn definition_prefers_code_declaration() {
 }
 
 #[test]
+fn definition_ignores_type_references_in_declaration_signatures() {
+    let directory = TempDir::new();
+    let declaration = directory.0.join("types.rs");
+    let usage = directory.0.join("api.rs");
+    let usage_text = "use crate::types::Widget;\npub fn build(widget: Widget) {}\n";
+    write_file(&declaration, "pub struct Widget;\n");
+    write_file(&usage, usage_text);
+
+    let declaration_uri = uri_from_path(&declaration);
+    let usage_uri = uri_from_path(&usage);
+    let mut server = LspServer::new(Some(directory.0.clone()));
+    server
+        .documents
+        .insert(usage_uri.clone(), usage_text.to_string());
+    let character = usage_text.lines().nth(1).unwrap().find("Widget").unwrap() + 1;
+    let result = server.handle(
+        "textDocument/definition",
+        &json!({"textDocument": {"uri": usage_uri}, "position": {"line": 1, "character": character}}),
+    );
+
+    assert_eq!(result[0]["uri"], declaration_uri);
+    assert_eq!(result[0]["range"]["start"]["line"], 0);
+}
+
+#[test]
 fn prose_definition_is_navigable() {
     let directory = TempDir::new();
     let notes = directory.0.join("notes.md");
