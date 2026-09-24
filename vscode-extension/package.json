@@ -4,7 +4,7 @@
   "description": "Language-agnostic definition and reference navigation for every file",
   "version": "0.2639.2",
   "publisher": "beleap",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "engines": {
     "vscode": ">=1.85.0"
   },
