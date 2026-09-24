@@ -44,6 +44,9 @@ class LspClient {
         this.sendRequest("initialize", this.initializeParams())
           .then(() => {
             this.sendNotification("initialized", {});
+            this.output.appendLine(
+              `Successfully started ${command} for ${this.rootPath}`
+            );
             resolve();
           })
           .catch(reject);
