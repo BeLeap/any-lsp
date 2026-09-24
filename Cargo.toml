@@ -1,6 +1,6 @@
 [package]
 name = "any-lsp"
-version = "0.2639.4"
+version = "0.2639.5"
 edition = "2021"
 description = "A language-agnostic LSP server powered by ripgrep"
 license = "MPL-2.0"
