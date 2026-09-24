@@ -1,9 +1,12 @@
 use crate::position::{normalize_path, path_from_uri, uri_from_path, utf16_length};
+use grep::matcher::Matcher;
+use grep::regex::RegexMatcherBuilder;
+use grep::searcher::{sinks::UTF8, BinaryDetection, SearcherBuilder};
+use ignore::{overrides::OverrideBuilder, WalkBuilder};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Occurrence {
@@ -119,13 +122,7 @@ impl WorkspaceSearcher {
         if symbol.is_empty() {
             return Vec::new();
         }
-        let mut results = match self.search_with_rg(symbol) {
-            Some(results) => results,
-            None => {
-                eprintln!("ripgrep was not found; using the built-in text search");
-                self.search_with_builtin(symbol)
-            }
-        };
+        let mut results = self.search_with_ripgrep(symbol);
         let open_paths: HashSet<PathBuf> = open_documents
             .keys()
             .map(|uri| path_from_uri(uri))
@@ -147,104 +144,84 @@ impl WorkspaceSearcher {
         results
     }
 
-    fn search_with_rg(&self, symbol: &str) -> Option<Vec<Occurrence>> {
-        let mut command = Command::new("rg");
-        command.args([
-            "--json",
-            "--no-messages",
-            "--color",
-            "never",
-            "--hidden",
-            "--glob",
-            "!.git/**",
-        ]);
+    fn search_with_ripgrep(&self, symbol: &str) -> Vec<Occurrence> {
+        let mut matcher_builder = RegexMatcherBuilder::new();
+        matcher_builder
+            .fixed_strings(true)
+            .case_insensitive(!self.config.case_sensitive);
+        let Ok(matcher) = matcher_builder.build(symbol) else {
+            return Vec::new();
+        };
+
+        let mut walker = WalkBuilder::new(&self.root);
+        walker.hidden(false);
+        let mut overrides = OverrideBuilder::new(&self.root);
+        if overrides.add("!.git/**").is_err() {
+            return Vec::new();
+        }
         for pattern in &self.config.include {
-            command.args(["--glob", pattern]);
+            if overrides.add(pattern).is_err() {
+                return Vec::new();
+            }
         }
         for pattern in &self.config.exclude {
-            command.args(["--glob", &format!("!{pattern}")]);
-        }
-        if !self.config.case_sensitive {
-            command.arg("--ignore-case");
-        }
-        let pattern = rg_pattern(symbol);
-        let root = self.root.to_string_lossy().to_string();
-        command.args(["--pcre2", "--"]).arg(pattern).arg(root);
-        let output = command.output().ok()?;
-        if !matches!(output.status.code(), Some(0) | Some(1)) {
-            return None;
-        }
-
-        let mut results = Vec::new();
-        for raw_line in output.stdout.split(|byte| *byte == b'\n') {
-            let Ok(payload) = serde_json::from_slice::<Value>(raw_line) else {
-                continue;
-            };
-            if payload.get("type").and_then(Value::as_str) != Some("match") {
-                continue;
-            }
-            let data = &payload["data"];
-            let Some(path_text) = data["path"]["text"].as_str() else {
-                continue;
-            };
-            let path = normalize_path(PathBuf::from(path_text));
-            let line_text = data["lines"]["text"]
-                .as_str()
-                .unwrap_or("")
-                .trim_end_matches(['\r', '\n'])
-                .to_string();
-            let line = data["line_number"].as_u64().unwrap_or(1).saturating_sub(1) as usize;
-            for submatch in data["submatches"].as_array().into_iter().flatten() {
-                let start = submatch["start"].as_u64().unwrap_or(0) as usize;
-                let end = submatch["end"].as_u64().unwrap_or(start as u64) as usize;
-                let bytes = line_text.as_bytes();
-                let start = start.min(bytes.len());
-                let end = end.min(bytes.len()).max(start);
-                let prefix = String::from_utf8_lossy(&bytes[..start]);
-                let matched = String::from_utf8_lossy(&bytes[start..end]);
-                results.push(Occurrence {
-                    uri: uri_from_path(&path),
-                    path: path.clone(),
-                    line,
-                    start: utf16_length(&prefix),
-                    end: utf16_length(&format!("{prefix}{matched}")),
-                    line_text: line_text.clone(),
-                });
+            if overrides.add(&format!("!{pattern}")).is_err() {
+                return Vec::new();
             }
         }
-        Some(results)
-    }
+        let Ok(overrides) = overrides.build() else {
+            return Vec::new();
+        };
+        walker.overrides(overrides);
 
-    fn search_with_builtin(&self, symbol: &str) -> Vec<Occurrence> {
-        let mut files = Vec::new();
-        collect_files(&self.root, &mut files);
+        let searcher = SearcherBuilder::new()
+            .line_number(true)
+            .binary_detection(BinaryDetection::quit(b'\0'))
+            .build();
         let mut results = Vec::new();
-        for path in files {
-            let relative = path
-                .strip_prefix(&self.root)
-                .unwrap_or(&path)
-                .to_string_lossy();
-            if !self.config.include.is_empty()
-                && !self
-                    .config
-                    .include
-                    .iter()
-                    .any(|pattern| glob_matches(pattern, &relative))
+
+        for entry in walker.build() {
+            let Ok(entry) = entry else {
+                continue;
+            };
+            if !entry
+                .file_type()
+                .map(|kind| kind.is_file())
+                .unwrap_or(false)
             {
                 continue;
             }
-            if self
-                .config
-                .exclude
-                .iter()
-                .any(|pattern| glob_matches(pattern, &relative))
-            {
-                continue;
-            }
-            let Ok(text) = fs::read_to_string(&path) else {
-                continue;
-            };
-            results.extend(self.search_text(&uri_from_path(&path), &path, &text, symbol));
+            let path = normalize_path(entry.into_path());
+            let uri = uri_from_path(&path);
+            let mut file_results = Vec::new();
+            let mut searcher = searcher.clone();
+            let _ = searcher.search_path(
+                &matcher,
+                &path,
+                UTF8(|line_number, line| {
+                    let line_text = line.trim_end_matches(['\r', '\n']).to_string();
+                    matcher
+                        .find_iter(line.as_bytes(), |matched| {
+                            let start = matched.start();
+                            let end = matched.end();
+                            if !matches_word_boundaries(line, symbol, start, end) {
+                                return true;
+                            }
+                            file_results.push(Occurrence {
+                                uri: uri.clone(),
+                                path: path.clone(),
+                                line: line_number.saturating_sub(1) as usize,
+                                start: utf16_length(&line[..start]),
+                                end: utf16_length(&line[..end]),
+                                line_text: line_text.clone(),
+                            });
+                            true
+                        })
+                        .map_err(|error| io::Error::other(error.to_string()))?;
+                    Ok(true)
+                }),
+            );
+            results.extend(file_results);
         }
         results
     }
@@ -267,78 +244,14 @@ impl WorkspaceSearcher {
     }
 }
 
-fn collect_files(path: &Path, files: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(path) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if entry
-            .file_type()
-            .map(|kind| kind.is_symlink())
-            .unwrap_or(true)
-        {
-            continue;
-        }
-        if path.file_name().and_then(|name| name.to_str()) == Some(".git") {
-            continue;
-        }
-        if path.is_dir() {
-            collect_files(&path, files);
-        } else if path.is_file() {
-            files.push(normalize_path(path));
-        }
+fn matches_word_boundaries(line: &str, symbol: &str, start: usize, end: usize) -> bool {
+    let before = line[..start].chars().next_back();
+    let after = line[end..].chars().next();
+    if is_word_character(symbol.chars().next()) && is_word_character(before) {
+        return false;
     }
-}
-
-fn glob_matches(pattern: &str, text: &str) -> bool {
-    if let Some(stripped) = pattern.strip_prefix("**/") {
-        if glob_matches(stripped, text) {
-            return true;
-        }
+    if is_word_character(symbol.chars().last()) && is_word_character(after) {
+        return false;
     }
-    let pattern: Vec<char> = pattern.chars().collect();
-    let text: Vec<char> = text.chars().collect();
-    fn matches(pattern: &[char], text: &[char], pattern_index: usize, text_index: usize) -> bool {
-        if pattern_index == pattern.len() {
-            return text_index == text.len();
-        }
-        match pattern[pattern_index] {
-            '*' => {
-                matches(pattern, text, pattern_index + 1, text_index)
-                    || (text_index < text.len()
-                        && matches(pattern, text, pattern_index, text_index + 1))
-            }
-            '?' => {
-                text_index < text.len() && matches(pattern, text, pattern_index + 1, text_index + 1)
-            }
-            value => {
-                text_index < text.len()
-                    && value == text[text_index]
-                    && matches(pattern, text, pattern_index + 1, text_index + 1)
-            }
-        }
-    }
-    matches(&pattern, &text, 0, 0)
-}
-
-fn rg_pattern(symbol: &str) -> String {
-    let mut escaped = String::new();
-    for character in symbol.chars() {
-        if r#"\.^$*+?()[]{}|"#.contains(character) {
-            escaped.push('\\');
-        }
-        escaped.push(character);
-    }
-    let prefix = if is_word_character(symbol.chars().next()) {
-        r"(?<![\p{L}\p{N}_])"
-    } else {
-        ""
-    };
-    let suffix = if is_word_character(symbol.chars().last()) {
-        r"(?![\p{L}\p{N}_])"
-    } else {
-        ""
-    };
-    format!("{prefix}{escaped}{suffix}")
+    true
 }

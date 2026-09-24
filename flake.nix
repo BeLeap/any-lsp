@@ -28,15 +28,8 @@
             src = ./.;
 
             cargoLock = { lockFile = ./Cargo.lock; };
-            nativeBuildInputs = [ pkgs.makeWrapper ];
-            nativeCheckInputs = [ pkgs.ripgrep ];
 
             doCheck = true;
-
-            postInstall = ''
-              wrapProgram $out/bin/any-lsp \
-                --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.ripgrep ]}
-            '';
 
             meta = {
               description = "A language-agnostic LSP server powered by ripgrep";
@@ -89,7 +82,7 @@
       devShells = forAllSystems ({ pkgs }:
         {
           default = pkgs.mkShell {
-            packages = [ pkgs.cargo pkgs.cargo-edit pkgs.clippy pkgs.ripgrep pkgs.rustc pkgs.rustfmt pkgs.zip ];
+            packages = [ pkgs.cargo pkgs.cargo-edit pkgs.clippy pkgs.rustc pkgs.rustfmt pkgs.zip ];
           };
         });
     };

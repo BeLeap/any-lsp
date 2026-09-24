@@ -9,7 +9,7 @@ It does not need a parser, grammar, or language-specific index. That makes it us
 
 ## Run
 
-Rust and `rg` are recommended for local development. The server communicates over stdin/stdout using LSP's `Content-Length` framing:
+Rust is recommended for local development. The server communicates over stdin/stdout using LSP's `Content-Length` framing:
 
 ```sh
 cargo run -- --root /path/to/workspace
@@ -22,9 +22,9 @@ nix run . -- --root /path/to/workspace
 nix build .
 ```
 
-The flake wraps the executable with `ripgrep` on `PATH`, so the runtime does
-not depend on a separately installed `rg`. `nix develop` provides Rust, Cargo,
-formatting tools, and ripgrep for local development.
+The package includes ripgrep's search libraries, so the runtime does not depend
+on a separately installed `rg` executable. `nix develop` provides Rust, Cargo,
+and formatting tools for local development.
 
 The client can pass optional `initializationOptions`:
 
@@ -37,7 +37,8 @@ The client can pass optional `initializationOptions`:
 }
 ```
 
-When `rg` is unavailable, a built-in text-search fallback keeps open-buffer and small-workspace use functional.
+Workspace searches use ripgrep's `grep` and `ignore` crates directly. Open
+buffers are still searched from memory and are merged with the on-disk results.
 
 ## Try it in Helix
 

@@ -6,4 +6,6 @@ description = "A language-agnostic LSP server powered by ripgrep"
 license = "MPL-2.0"
 
 [dependencies]
+grep = "0.4.1"
+ignore = "0.4.29"
 serde_json = "1"
