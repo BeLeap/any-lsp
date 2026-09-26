@@ -62,7 +62,7 @@ pkgs.stdenvNoCC.mkDerivation {
     <?xml version="1.0" encoding="utf-8"?>
     <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
       <Metadata>
-        <Identity Language="en-US" Id="beleap.any-lsp" Version="$version" Publisher="beleap" />
+        <Identity Language="en-US" Id="any-lsp" Version="$version" Publisher="beleap" />
         <DisplayName>any-lsp</DisplayName>
         <Description xml:space="preserve">Language-agnostic definition and reference navigation for every file.</Description>
         <Categories>Programming Languages</Categories>
