@@ -62,7 +62,8 @@ The VS Code extension registers any-lsp's definition and reference providers
 for every local file. VS Code keeps existing providers such as rust-analyzer
 active and combines their results with any-lsp's text-search results.
 
-Build and install the Nix-packaged extension:
+Install [any-lsp from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=BeLeap.any-lsp),
+or build and install the Nix-packaged extension:
 
 ```sh
 nix build .#vscode-extension
