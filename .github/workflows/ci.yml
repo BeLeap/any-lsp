@@ -91,14 +91,18 @@ jobs:
 
           nix develop --command cargo set-version "$version"
           nix develop --command cargo update --workspace --offline
+          jq --arg version "$version" '.version = $version' \
+            vscode-extension/package.json > vscode-extension/package.json.tmp
+          mv vscode-extension/package.json.tmp vscode-extension/package.json
 
           actual_version="$(nix develop --command cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
           test "$actual_version" = "$version"
+          test "$(jq -r '.version' vscode-extension/package.json)" = "$version"
           git diff --check
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
+          git add Cargo.toml Cargo.lock vscode-extension/package.json
           git commit -m "release: ${tag} for ${source_sha} [skip ci]"
           release_commit="$(git rev-parse HEAD)"
           git push origin HEAD:master
@@ -173,14 +177,10 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  release:
-    name: Create GitHub release
+  build-vsix:
+    name: Build VSIX
     needs: [prepare, build]
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    env:
-      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
 
     steps:
       - name: Check out tagged source
@@ -216,6 +216,37 @@ jobs:
           vsix="$(find -L result-vscode-extension -maxdepth 1 -name '*.vsix' -print -quit)"
           test -n "$vsix"
           cp "$vsix" "dist/any-lsp-vscode-${version}.vsix"
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: dist/*.vsix
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Create GitHub release
+    needs: [prepare, build, build-vsix]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ci-*
+          path: dist
+          merge-multiple: true
+
+      - name: Download VSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vsix
+          path: dist
 
       - name: Create or update release and upload binaries
         env:
