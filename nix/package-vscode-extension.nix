@@ -81,6 +81,6 @@ pkgs.stdenvNoCC.mkDerivation {
     EOF
 
     mkdir -p "$out"
-    (cd "$vsix_root" && zip -qr "$out/any-lsp-vscode-${version}.vsix" .)
+    (cd "$vsix_root" && zip -X -qr "$out/any-lsp-vscode-${version}.vsix" .)
   '';
 }
